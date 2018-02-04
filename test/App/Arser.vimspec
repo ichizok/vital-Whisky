@@ -1,0 +1,781 @@
+Describe App.Arser
+  Before
+    let Arser = vital#gina#import('App.Arser')
+  End
+
+  Describe .parse({cmdline})
+    It splits arguments in {cmdline} and return a list (POSIX)
+      let cmdline = '-abc option_argument -d -foption_argument operand1 operand2'
+      Assert Equals(Arser.parse(cmdline), [
+            \ '-abc',
+            \ 'option_argument',
+            \ '-d',
+            \ '-foption_argument',
+            \ 'operand1',
+            \ 'operand2',
+            \])
+    End
+
+    It does not splits an argument which is enclosed by a single quote
+      let cmdline = "-abc 'option_argument -d' '-foption_argument' 'operand1 operand2'"
+      Assert Equals(Arser.parse(cmdline), [
+            \ '-abc',
+            \ "'option_argument -d'",
+            \ "'-foption_argument'",
+            \ "'operand1 operand2'",
+            \])
+    End
+
+    It does not splits an argument which is enclosed by a double quote
+      let cmdline = '-abc "option_argument -d" "-foption_argument" "operand1 operand2"'
+      Assert Equals(Arser.parse(cmdline), [
+            \ '-abc',
+            \ '"option_argument -d"',
+            \ '"-foption_argument"',
+            \ '"operand1 operand2"',
+            \])
+    End
+  End
+
+  Describe .escape({str})
+    It returns {str} itself when {str} does not contains whitespaces
+      Assert Equals(Arser.escape('foo'), 'foo')
+    End
+
+    It returns {str} enclosed with single quotes when {str} contains whitespaces
+      Assert Equals(Arser.escape('f oo'), "'f oo'")
+    End
+  End
+
+  Describe .unescape({str})
+    It returns leading/trailing single quotes when {str} is quoted
+      Assert Equals(Arser.unescape("'foo'"), 'foo')
+      Assert Equals(Arser.unescape("'foo"), "'foo")
+      Assert Equals(Arser.unescape("foo'"), "foo'")
+      Assert Equals(Arser.unescape("''foo''"), "'foo'")
+    End
+
+    It returns leading/trailing single quotes when {str} is quoted
+      Assert Equals(Arser.unescape('"foo"'), 'foo')
+      Assert Equals(Arser.unescape('"foo'), '"foo')
+      Assert Equals(Arser.unescape('foo"'), 'foo"')
+      Assert Equals(Arser.unescape('""foo""'), '"foo"')
+    End
+  End
+
+  Describe .search({args}, {options}[, {start}[, {count}]])
+    Before
+      let args = [
+            \ '-s',
+            \ '-oVALUE',
+            \ 'operand',
+            \ '-p', 'ARGUMENT',
+            \ 'operand',
+            \ '-abc', 'ARGUMENT?',
+            \ 'operand',
+            \ '--long-option',
+            \ 'operand',
+            \ '--long-option-with-value=VALUE',
+            \ 'operand',
+            \ '--long-option-with-argument', 'ARGUMENT',
+            \ 'operand1', 'operand2',
+            \]
+    End
+
+    Context POSIX/GNU short option
+      It returns first related indices of {options} in {args}
+        let options = ['-s']
+        Assert Equals(Arser.search(args, options), {
+              \ 'index': 0,
+              \ 'option': '-s',
+              \ 'prefix': '',
+              \ 'suffix': '',
+              \ 'argument': v:null,
+              \})
+      End
+
+      It returns first related indices of {options} in {args} with a value
+        let options = ['-o']
+        Assert Equals(Arser.search(args, options), {
+              \ 'index': 1,
+              \ 'option': '-o',
+              \ 'prefix': '',
+              \ 'suffix': 'VALUE',
+              \ 'argument': 'operand',
+              \})
+      End
+
+      It returns first related indices of {options} in {args} with an argument
+        let options = ['-p']
+        Assert Equals(Arser.search(args, options), {
+              \ 'index': 3,
+              \ 'option': '-p',
+              \ 'prefix': '',
+              \ 'suffix': '',
+              \ 'argument': 'ARGUMENT',
+              \})
+      End
+
+      It returns first related indices of {options} in {args} with collapsed style
+        let options = ['-a']
+        Assert Equals(Arser.search(args, options), {
+              \ 'index': 6,
+              \ 'option': '-a',
+              \ 'prefix': '',
+              \ 'suffix': 'bc',
+              \ 'argument': 'ARGUMENT?',
+              \})
+
+        let options = ['-b']
+        Assert Equals(Arser.search(args, options), {
+              \ 'index': 6,
+              \ 'option': '-b',
+              \ 'prefix': 'a',
+              \ 'suffix': 'c',
+              \ 'argument': 'ARGUMENT?',
+              \})
+
+        let options = ['-c']
+        Assert Equals(Arser.search(args, options), {
+              \ 'index': 6,
+              \ 'option': '-c',
+              \ 'prefix': 'ab',
+              \ 'suffix': '',
+              \ 'argument': 'ARGUMENT?',
+              \})
+      End
+    End
+
+    Context GNU long option
+      It returns first related indices of {options} in {args}
+        let options = ['--long-option']
+        Assert Equals(Arser.search(args, options), {
+              \ 'index': 9,
+              \ 'option': '--long-option',
+              \ 'prefix': '',
+              \ 'suffix': '',
+              \ 'argument': 'operand',
+              \})
+      End
+
+      It returns first related indices of {options} in {args} with a value
+        let options = ['--long-option-with-value']
+        Assert Equals(Arser.search(args, options), {
+              \ 'index': 11,
+              \ 'option': '--long-option-with-value',
+              \ 'prefix': '',
+              \ 'suffix': '=VALUE',
+              \ 'argument': 'operand',
+              \})
+      End
+
+      It returns first related indices of {options} in {args} with an argument
+        let options = ['--long-option-with-argument']
+        Assert Equals(Arser.search(args, options), {
+              \ 'index': 13,
+              \ 'option': '--long-option-with-argument',
+              \ 'prefix': '',
+              \ 'suffix': '',
+              \ 'argument': 'ARGUMENT',
+              \})
+      End
+    End
+  End
+
+  Describe .pop({args}, {options}[, {default}[, {start}[, {count}]]])
+    Context POSIX/GNU short option
+      Before
+        let args = [
+              \ '-s',
+              \ '-oVALUE',
+              \ 'operand',
+              \ '-p', 'ARGUMENT',
+              \ 'operand',
+              \ '-abc', 'ARGUMENT?',
+              \ 'operand',
+              \]
+      End
+
+      Context missing option (-m)
+        It does nothing and return {default} when {options} is not in {args}
+          Assert Equals(Arser.pop(args, ['-m'], 0), 0)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context without value/argument (-s)
+        It removes option and returns {default}
+          Assert Equals(Arser.pop(args, ['-s'], 'REMOVED'), 'REMOVED')
+          Assert Equals(args, [
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context with value (-o)
+        It removes the option character and returns its {default} while it conflicts with a collapsed style
+          Assert Equals(Arser.pop(args, ['-o'], 'REMOVED'), 'REMOVED')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-VALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context with argument (-p)
+        It removes option/argument and returns its argument
+          Assert Equals(Arser.pop(args, ['-p'], 'REMOVED'), 'ARGUMENT')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context with collapsed style (-abc)
+        It removes option and returns its value (-a)
+          Assert Equals(Arser.pop(args, ['-a'], 'REMOVED'), 'REMOVED')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-bc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes option character and returns {default} (-b)
+          Assert Equals(Arser.pop(args, ['-b'], 'REMOVED'), 'REMOVED')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-ac', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes option character and returns {default} (-c)
+          Assert Equals(Arser.pop(args, ['-c'], 'REMOVED'), 'ARGUMENT?')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-ab',
+                \ 'operand',
+                \])
+        End
+      End
+    End
+
+    Context GNU long option
+      Before
+        let args = [
+              \ '--long-option',
+              \ '--some-option',
+              \ 'operand',
+              \ '--long-option-with-value=VALUE',
+              \ 'operand',
+              \ '--long-option-with-argument', 'ARGUMENT',
+              \ 'operand',
+              \]
+      End
+
+      Context missing option (--missing)
+        It does nothing and return {default} when {options} is not in {args}
+          Assert Equals(Arser.pop(args, ['--missing'], 0), 0)
+          Assert Equals(args, [
+                \ '--long-option',
+                \ '--some-option',
+                \ 'operand',
+                \ '--long-option-with-value=VALUE',
+                \ 'operand',
+                \ '--long-option-with-argument', 'ARGUMENT',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context without value/argument (--long-option)
+        It removes option and returns {default}
+          Assert Equals(Arser.pop(args, ['--long-option'], 'REMOVED'), 'REMOVED')
+          Assert Equals(args, [
+                \ '--some-option',
+                \ 'operand',
+                \ '--long-option-with-value=VALUE',
+                \ 'operand',
+                \ '--long-option-with-argument', 'ARGUMENT',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context with value (--long-option-with-value)
+        It removes option and returns its value
+          Assert Equals(Arser.pop(args, ['--long-option-with-value'], 'REMOVED'), 'VALUE')
+          Assert Equals(args, [
+                \ '--long-option',
+                \ '--some-option',
+                \ 'operand',
+                \ 'operand',
+                \ '--long-option-with-argument', 'ARGUMENT',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context with argument (--long-option-with-argument)
+        It removes option/argument and returns its argument
+          Assert Equals(Arser.pop(args, ['--long-option-with-argument'], 'REMOVED'), 'ARGUMENT')
+          Assert Equals(args, [
+                \ '--long-option',
+                \ '--some-option',
+                \ 'operand',
+                \ '--long-option-with-value=VALUE',
+                \ 'operand',
+                \ 'operand',
+                \])
+        End
+      End
+    End
+  End
+
+  Describe .set({args}, {options}, {value}[, {start}[, {count}]])
+    Context POSIX/GNU short option
+      Before
+        let args = [
+              \ '-s',
+              \ '-oVALUE',
+              \ 'operand',
+              \ '-p', 'ARGUMENT',
+              \ 'operand',
+              \ '-abc', 'ARGUMENT?',
+              \ 'operand',
+              \]
+      End
+
+      Context missing option (-m)
+        It does nothing when {value} is 0
+          call Arser.set(args, ['-m'], 0)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It inserts an option when {value} is 1
+          call Arser.set(args, ['-m'], 1)
+          Assert Equals(args, [
+                \ '-m',
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It inserts an option and argument when {value} is 'FOO'
+          call Arser.set(args, ['-m'], 'FOO')
+          Assert Equals(args, [
+                \ '-m', 'FOO',
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It inserts an option and enclosed argument when {value} is 'F OO'
+          call Arser.set(args, ['-m'], 'F OO')
+          Assert Equals(args, [
+                \ '-m', "'F OO'",
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context without value/argument (-s)
+        It removes the option when {value} is 0 (empty)
+          call Arser.set(args, ['-s'], 0)
+          Assert Equals(args, [
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It does nothing when {value} is 1 while the option already in {args}
+          call Arser.set(args, ['-s'], 1)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It inserts an argument after the option when {value} is 'FOO'
+          call Arser.set(args, ['-s'], 'FOO')
+          Assert Equals(args, [
+                \ '-s', 'FOO',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It inserts and encloses the value when {value} is 'F OO'
+          call Arser.set(args, ['-s'], 'F OO')
+          Assert Equals(args, [
+                \ '-s', "'F OO'",
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context with value (-o)
+        It removes the option character when {value} is 0 while it conflicts with a collapsed style
+          call Arser.set(args, ['-o'], 0)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-VALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It does nothing when {value} is 1 while the option already in {args} as a collapsed style
+          call Arser.set(args, ['-o'], 1)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes the option character and insert the option and its argument when {value} is 'FOO'
+          call Arser.set(args, ['-o'], 'FOO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-o', 'FOO',
+                \ '-VALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes the option character and insert the option and its enclosed argument when {value} is 'F OO'
+          call Arser.set(args, ['-o'], 'F OO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-o', "'F OO'",
+                \ '-VALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context with argument (-p)
+        It removes the option and the argument when {value} is 0
+          call Arser.set(args, ['-p'], 0)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes the argument when {value} is 1
+          call Arser.set(args, ['-p'], 1)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It replaces the argument when {value} is 'FOO'
+          call Arser.set(args, ['-p'], 'FOO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'FOO',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It replaces and encloses the argument when {value} is 'F OO'
+          call Arser.set(args, ['-p'], 'F OO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', "'F OO'",
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+      End
+
+      Context with collapsed style (-abc)
+        It removes the character from the option when {value} is 0 (-a)
+          call Arser.set(args, ['-a'], 0)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-bc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes the character from the option when {value} is 0 (-b)
+          call Arser.set(args, ['-b'], 0)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-ac', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes the character and the argument from the option when {value} is 0 (-c)
+          call Arser.set(args, ['-c'], 0)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-ab',
+                \ 'operand',
+                \])
+        End
+
+        It does nothing when {value} is 1 (-a)
+          call Arser.set(args, ['-a'], 1)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It does nothing when {value} is 1 (-b)
+          call Arser.set(args, ['-b'], 1)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes the argument when {value} is 1 (-c)
+          call Arser.set(args, ['-c'], 1)
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc',
+                \ 'operand',
+                \])
+        End
+
+        It removes the character from the option and inserts the option and the value when {value} is 'FOO' (-a)
+          call Arser.set(args, ['-a'], 'FOO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-a', 'FOO',
+                \ '-bc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes the character from the option and inserts the option and the value when {value} is 'FOO' (-b)
+          call Arser.set(args, ['-b'], 'FOO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-b', 'FOO',
+                \ '-ac', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It replaces the argument when {value} is 'FOO' (-c)
+          call Arser.set(args, ['-c'], 'FOO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', 'FOO',
+                \ 'operand',
+                \])
+        End
+
+        It removes the character from the option and inserts the option and the enclosed value when {value} is 'F OO' (-a)
+          call Arser.set(args, ['-a'], 'F OO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-a', "'F OO'",
+                \ '-bc', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It removes the character from the option and inserts the option and the enclosed value when {value} is 'F OO' (-b)
+          call Arser.set(args, ['-b'], 'F OO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-b', "'F OO'",
+                \ '-ac', 'ARGUMENT?',
+                \ 'operand',
+                \])
+        End
+
+        It replaces the argument to the enclosed value when {value} is 'F OO' (-c)
+          call Arser.set(args, ['-c'], 'F OO')
+          Assert Equals(args, [
+                \ '-s',
+                \ '-oVALUE',
+                \ 'operand',
+                \ '-p', 'ARGUMENT',
+                \ 'operand',
+                \ '-abc', "'F OO'",
+                \ 'operand',
+                \])
+        End
+      End
+    End
+
+    Context GNU long option
+      Before
+        let args = [
+              \ '--long-option',
+              \ '--some-option',
+              \ 'operand',
+              \ '--long-option-with-value=VALUE',
+              \ 'operand',
+              \ '--long-option-with-argument', 'ARGUMENT',
+              \ 'operand',
+              \]
+      End
+    End
+  End
+End
