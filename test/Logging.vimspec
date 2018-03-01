@@ -1,0 +1,96 @@
+Describe Logging
+  Before
+    let Logging = healthcheck#vital#import('Logging')
+  End
+
+  Describe .get({script_file})
+    It returns a logger instance
+      let logger = Logging.get('foobar/autoload/foobar/hoge.vim')
+      Assert Equals(logger.module, 'foobar#hoge')
+      Assert KeyExists(logger, 'debug')
+      Assert KeyExists(logger, 'info')
+      Assert KeyExists(logger, 'warning')
+      Assert KeyExists(logger, 'error')
+    End
+  End
+
+  Context logger
+    Before
+      let logger = Logging.get('foobar/autoload/foobar/hoge.vim')
+      let output = tempname()
+      call Logging.set_output(output)
+    End
+
+    After
+      call delete(output)
+    End
+
+    Describe .debug({message})
+      It writes {message} with {level} into the output file
+        call Logging.set_level(Logging.DEBUG)
+        call logger.debug("Hello darkness\nmy old friend")
+        Assert Equals(filereadable(output), 1)
+        let content = readfile(output)
+        Assert Match(content[0], '\d\{2}:\d\{2}:\d\{2} DEBUG:foobar#hoge:Hello darkness')
+        Assert Match(content[1], 'my old friend')
+      End
+
+      It won't write {message} with {level} into the output file if 'level' is greater than DEBUG
+        call Logging.set_level(Logging.INFO)
+        call logger.debug("Hello darkness\nmy old friend")
+        Assert Equals(filereadable(output), 0)
+      End
+    End
+
+    Describe .info({message})
+      It writes {message} with {level} into the output file
+        call Logging.set_level(Logging.INFO)
+        call logger.info("Hello darkness\nmy old friend")
+        Assert Equals(filereadable(output), 1)
+        let content = readfile(output)
+        Assert Match(content[0], '\d\{2}:\d\{2}:\d\{2} INFO:foobar#hoge:Hello darkness')
+        Assert Match(content[1], 'my old friend')
+      End
+
+      It won't write {message} with {level} into the output file if 'level' is greater than INFO
+        call Logging.set_level(Logging.WARNING)
+        call logger.info("Hello darkness\nmy old friend")
+        Assert Equals(filereadable(output), 0)
+      End
+    End
+
+    Describe .warning({message})
+      It writes {message} with {level} into the output file
+        call Logging.set_level(Logging.WARNING)
+        call logger.warning("Hello darkness\nmy old friend")
+        Assert Equals(filereadable(output), 1)
+        let content = readfile(output)
+        Assert Match(content[0], '\d\{2}:\d\{2}:\d\{2} WARNING:foobar#hoge:Hello darkness')
+        Assert Match(content[1], 'my old friend')
+      End
+
+      It won't write {message} with {level} into the output file if 'level' is greater than WARNING
+        call Logging.set_level(Logging.ERROR)
+        call logger.warning("Hello darkness\nmy old friend")
+        Assert Equals(filereadable(output), 0)
+      End
+    End
+
+    Describe .error({message})
+      It writes {message} with {level} into the output file
+        call Logging.set_level(Logging.ERROR)
+        call logger.error("Hello darkness\nmy old friend")
+        Assert Equals(filereadable(output), 1)
+        let content = readfile(output)
+        Assert Match(content[0], '\d\{2}:\d\{2}:\d\{2} ERROR:foobar#hoge:Hello darkness')
+        Assert Match(content[1], 'my old friend')
+      End
+
+      It won't write {message} with {level} into the output file if 'level' is greater than ERROR
+        call Logging.set_level(Logging.NOTSET)
+        call logger.error("Hello darkness\nmy old friend")
+        Assert Equals(filereadable(output), 0)
+      End
+    End
+  End
+End
