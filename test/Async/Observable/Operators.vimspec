@@ -1,0 +1,121 @@
+Describe Async.Observable.Operators
+  Before all
+    let Promise = vital#vital#import('Async.Promise')
+    let Observable = healthcheck#vital#import('Async.Observable')
+  End
+
+  Before
+    let Operators = healthcheck#vital#import('Async.Observable.Operators')
+  End
+
+  Describe .concat()
+    It concats given observables
+      let results = []
+      let observable = Observable.of(1, 2, 3).let(
+            \ Operators.concat(
+            \   Observable.of(4, 5, 6),
+            \   Observable.of(7, 8, 9),
+            \ )
+            \).subscribe({ v -> add(results, v) })
+      Assert Equals(results, [])
+      sleep 10m
+      Assert Equals(results, [1, 2, 3, 4, 5, 6, 7, 8, 9])
+    End
+  End
+
+  Describe .filter()
+    It filters each values via given function
+      let results = []
+      call Observable.of(1, 1, 2, 3, 5, 8)
+            \.let(Operators.filter({ value -> value % 2 is 0 }))
+            \.subscribe({ v -> add(results, v) })
+      Assert Equals(results, [])
+      sleep 10m
+      Assert Equals(results, [2, 8])
+    End
+  End
+
+  Describe .flatmap()
+    It maps and flattens the results using the supplied callback
+      let results = []
+      let p = Observable.of('a', 'b', 'c')
+            \.let(Operators.flatmap({ x -> map([1, 2, 3], { _, y -> [x, y] }) }))
+            \.subscribe({ v -> add(results, v) })
+      Assert Equals(results, [])
+      sleep 300m
+      Assert Equals(results, [
+            \ ['a', 1],
+            \ ['a', 2],
+            \ ['a', 3],
+            \ ['b', 1],
+            \ ['b', 2],
+            \ ['b', 3],
+            \ ['c', 1],
+            \ ['c', 2],
+            \ ['c', 3],
+            \])
+    End
+  End
+
+  Describe .foreach()
+    It calls a given function with each values
+      let results = []
+      let p = Observable.of(1, 1, 2, 3, 5, 8)
+            \.let(Operators.foreach({ v -> add(results, v * 2) }))
+      Assert Equals(results, [])
+      sleep 10m
+      Assert Equals(results, [2, 2, 4, 6, 10, 16])
+    End
+  End
+
+  Describe .map()
+    It modifies each values via given function
+      let results = []
+      call Observable.of(1, 1, 2, 3, 5, 8)
+            \.let(Operators.map({ v -> v * 2 }))
+            \.subscribe({ v -> add(results, v) })
+      Assert Equals(results, [])
+      sleep 10m
+      Assert Equals(results, [2, 2, 4, 6, 10, 16])
+    End
+  End
+
+  Describe .reduce()
+    It reduces each values via given function
+      let results = []
+      call Observable.of(1, 1, 2, 3, 5, 8)
+            \.let(Operators.reduce({ accumulate, value -> accumulate * value }))
+            \.subscribe({ v -> add(results, v) })
+      Assert Equals(results, [])
+      sleep 10m
+      Assert Equals(results, [1 * 1 * 2 * 3 * 5 * 8])
+    End
+
+    It reduces each values via given function and seed
+      let results = []
+      call Observable.of(1, 1, 2, 3, 5, 8)
+            \.let(Operators.reduce({ accumulate, value -> accumulate * value }, 10))
+            \.subscribe({ v -> add(results, v) })
+      Assert Equals(results, [])
+      sleep 10m
+      Assert Equals(results, [10 * 1 * 1 * 2 * 3 * 5 * 8])
+    End
+  End
+
+  Describe .tap()
+    It calls a given function with each values
+      let results1 = []
+      let results2 = []
+      call Observable.of(1, 1, 2, 3, 5, 8).pipe(
+            \ Operators.tap({ v -> add(results1, v) }),
+            \ Operators.map({ v -> v * 2 }),
+            \ Operators.tap({ v -> add(results2, v) }),
+            \).subscribe({ -> 0 })
+      Assert Equals(results1, [])
+      Assert Equals(results2, [])
+      sleep 10m
+      Assert Equals(results1, [1, 1, 2, 3, 5, 8])
+      Assert Equals(results2, [2, 2, 4, 6, 10, 16])
+    End
+  End
+End

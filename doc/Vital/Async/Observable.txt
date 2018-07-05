@@ -1,0 +1,339 @@
+*Vital/Async/Observable.txt*	Observable data model module
+
+Author : Alisue <lambdalisue@hashnote.net>
+License: MIT license
+Support: Vim 8.0.0000 and above
+Support: Neovim 0.2.0 and above
+
+
+=============================================================================
+CONTENTS			*Vital.Async.Observable-content*
+
+INTRODUCTION			|Vital.Async.Observable-introduction|
+USAGE				|Vital.Async.Observable-usage|
+INTERFACE			|Vital.Async.Observable-interface|
+  FUNCTION			|Vital.Async.Observable-function|
+  OBSERVABLE			|Vital.Async.Observable-observable|
+  OBSERVER			|Vital.Async.Observable-observer|
+  SUBSCRIPTION			|Vital.Async.Observable-subscription|
+
+
+=============================================================================
+INTRODUCTION			*Vital.Async.Observable-introduction*
+
+*Vital.Async.Observable* is a data model to handle push-based data sources
+such as events, timer intervals, and sockets.
+
+Core implementation has ported from JavaScript's zen-observable and follows
+proposal in TC39.
+
+https://github.com/zenparsing/zen-observable
+https://github.com/tc39/proposal-observable
+
+
+=============================================================================
+USAGE				*Vital.Async.Observable-usage*
+
+>
+	let Observable = vital#{plugin}#import('Async.Observable')
+	let Operators = vital#{plugin}#import('Async.Observable.Operators')
+	
+	let middle1 = []
+	let middle2 = []
+	let results = []
+	call Observable.of(1, 2, 3, 4, 5)
+	      \.pipe(
+	      \  Operators.tap({ v -> add(middle1, v) }),
+	      \  Operators.map({ v -> v * 3 }),
+	      \  Operators.tap({ v -> add(middle2, v) }),
+	      \  Operators.filter({ v -> v % 2 == 0 }),
+	      \).subscribe({ v -> add(results, v) })
+
+	echo join(middle1, ", ")
+	" 1, 2, 3, 4, 5
+
+	echo join(middle2, ", ")
+	" 3, 6, 9, 12, 15
+
+	echo join(results, ", ")
+	" 6, 12
+<
+
+=============================================================================
+INTERFACE			*Vital.Async.Observable-interface*
+
+-----------------------------------------------------------------------------
+FUNCTION			*Vital.Async.Observable-function*
+
+			*Vital.Async.Observable.new()*
+.new({subscriber})
+	Create a new observable object using a given {subscriber} function.
+	The {subscriber} is called whenevern the "subscribe" method of the
+	observable object is invoked. The function is called with an observer
+	object which has described in |Vital.Async.Observable-observer|.
+>
+
+	function! s:subscribe(observer) abort
+	  function! s:on_time() abort closure
+	    call a:observer.next('Hello')
+	    call a:observer.complete()
+	  endfunction
+
+	  " Emit single value after 1 second
+	  let timer = timer_start(
+	        \ 1000,
+	        \ { -> s:on_time() }
+	        \)
+
+	  " On unsubscription, cancel the timer
+	  return { -> timer_stop(timer) }
+	endfunction
+	call Observable.new(funcref('s:subscribe'))
+	      \.subscribe({ v -> execute('echo v', '') })
+	" Hello
+<
+
+			*Vital.Async.Observable.of()*
+.of([{item}, ...])
+	Create a new observable which will emit each supplied items.
+>
+	call Observable.of(1, 2, 3)
+	      \.subscribe({ v -> execute('echo v', '') })
+	" 1
+	" 2
+	" 3
+<
+
+			*Vital.Async.Observable.from()*
+.from({value})
+	Create a new observable from {value}.
+	When {value} is an iterable (list), it emits each items.
+	When {value} is an observable, it returns an instance of observable.
+>
+	call Observable.from([1, 2, 3])
+	      \.subscribe({ v -> execute('echo v', '') })
+	" 1
+	" 2
+	" 3
+
+	call Observable.from(Observable.of(1, 2, 3))
+	      \.subscribe({ v -> execute('echo v', '') })
+	" 1
+	" 2
+	" 3
+<
+			*Vital.Async.Observable.is_observable()*
+.is_observable({value})
+	Return 1 if {value} seems observable.
+
+-----------------------------------------------------------------------------
+OBSERVABLE			*Vital.Async.Observable-observable*
+
+			*Vital.Async.Observable-observable.subscribe()*
+.subscribe({observer})
+.subscribe({next}[, {error}[, {complete}]])
+	Subscribe the observable with a given {observer} and returns a new
+	{subscription} object.
+
+				*Vital.Async.Observable-observer*
+	The {observer} object may has the following methods.
+
+	next({value})	Receives the next value of the sequence.
+	error({value})	Receives the terminating error of the sequence.
+	complete()	Called when the stream has completed successfully.
+
+	When {next}, {error}, {complete} are given instead of {observer}, a
+	new observer object is constructed with these given functions.
+
+				*Vital.Async.Observable-subscription*
+	The {subscription} object has the following methods.
+
+	closed()	Return if the subscription has closed or not.
+	unsubscribe()	Unsubscribe (close) the subscription.
+>
+        let subscription = Observable.of(1, 2, 3).subscribe({
+              \ 'next': { v -> execute('echo v', '') },
+              \ 'error': { v -> execute('echoerr v', '') },
+              \ 'complete': { -> execute('echo "Complete"', '') },
+              \})
+        " 1
+        " 2
+        " 3
+        " Complete
+<
+			*Vital.Async.Observable-observable.let()*
+.let({operator})
+	Returns an observable sequence that is the result of invoking the
+	{operator} on the source sequence, without sharing subscriptions.
+>
+	call Observable.of(1, 2, 3)
+	      \.let(Operator.map({ v -> v * 2 }))
+	      \.subscribe({ v -> execute('echo v', '') })
+	" 2
+	" 4
+	" 6
+<
+			*Vital.Async.Observable-observable.pipe()*
+.pipe([{operators}...])
+	Returns an observable sequence that is the result of invoking the
+	{operators} sequentially, without sharing subscriptions.
+>
+	call Observable.of(1, 2, 3).pipe(
+	      \  Operator.map({ v -> v * 2 })),
+	      \  Operator.map({ v -> v * 3 })),
+	      \  Operator.map({ v -> v * 4 })),
+	      \).subscribe({ v -> execute('echo v', '') })
+	" 24
+	" 48
+	" 72
+<
+			*Vital.Async.Observable-observable.to_promise()*
+.to_promise()
+	Returns a Async.Promise which will be resolved with the last item
+	of the observable.
+>
+	call Observable.of(1, 2, 3)
+	      \.to_promise()
+	      \.then({ v -> execute('echo v', '') })
+	" 3
+<
+-----------------------------------------------------------------------------
+OPERATORS			*Vital.Async.Observable-operators*
+
+Developers can import operators by
+>
+	let Operators = vital#{plugin}#import('Async.Observable.Operators')
+<
+Or individually by
+>
+	let Operators = {}
+	call extend(
+	      \ Operators,
+	      \ vital#{plugin}#import('Async.Observable.Operators.Map'),
+	      \)
+	call extend(
+	      \ Operators,
+	      \ vital#{plugin}#import('Async.Observable.Operators.Tap'),
+	      \)
+<
+It is recommended to import operators individually to reduce the bundle size.
+
+			*Vital.Async.Observable-operators.concat()*
+			*Vital.Async.Observable.Operators.concat()*
+			*Vital.Async.Observable.Operators.Concat.concat()*
+.concat([{source}...])
+	Merges the current observable with additional observables.
+>
+	call Observable.of(1, 2, 3)
+	      \.let(Operators.concat([
+	      \  Observable.of(4, 5, 6),
+	      \  Observable.of(7, 8, 9),
+	      \]))
+	      \.subscribe({ v -> execute('echo v', '') })
+	" 1
+	" 2
+	" 3
+	" 4
+	" 5
+	" 6
+	" 7
+	" 8
+	" 9
+<
+			*Vital.Async.Observable-operators.filter()*
+			*Vital.Async.Observable.Operators.filter()*
+			*Vital.Async.Observable.Operators.Filter..filter()*
+.filter({fn})
+	Returns a new Observable that emits all values which pass the test
+	implemented by {fn}.
+>
+	call Observable.of(1, 2, 3)
+	      \.let(Operators.filter({ x -> x % 2 is# 0 }))
+	      \.subscribe({ v -> execute('echo v', '') })
+	" 2
+<
+			*Vital.Async.Observable-operators.flatmap()*
+			*Vital.Async.Observable.Operators.flatmap()*
+			*Vital.Async.Observable.Operators.Flatmap.flatmap()*
+.flatmap([{source}...])
+	Transforms an Observable by appling a function that you specify to
+	each item emitted by the source Observable, where that function
+	returns an Observable that itself emits items.
+>
+        call Observable.of('a', 'b', 'c')
+              \.let(Operators.flatmap({
+              \   x -> map([1, 2, 3], { _, y -> [x, y] })
+              \ })
+              \).subscribe({ v -> execute('echo v', '') })
+        " ['a', 1],
+        " ['a', 2],
+        " ['a', 3],
+        " ['b', 1],
+        " ['b', 2],
+        " ['b', 3],
+        " ['c', 1],
+        " ['c', 2],
+        " ['c', 3],
+<
+			*Vita.Async.Observable-operators.foreach()*
+			*Vita.Async.Observable.Operators.foreach()*
+			*Vita.Async.Observable.Operators.Foreach.foreach()*
+.foreach({fn})
+	Subscribes to the observable and returns a Async.Promise for the
+	completion value of the stream. The {fn} is called once for each
+	value in the stream.
+>
+	call Observable.of(1, 2, 3)
+	      \.let(Operator.foreach({ v -> execute('echo v', '') }))
+	      \.then({ -> execute('echo "Done"', '') })
+	" 1
+	" 2
+	" 3
+	" Done
+<
+			*Vital.Async.Observable-operators.map()*
+			*Vital.Async.Observable.Operators.map()*
+			*Vital.Async.Observable.Operators.Map.map()*
+.map({fn})
+	Returns a new Observable that emits the results of calling {fn} for
+	every value in the stream
+>
+	call Observable.of(1, 2, 3)
+	      \.let(Operators.map({ x -> x + x }))
+	      \.subscribe({ v -> execute('echo v', '') })
+	" 2
+	" 4
+	" 6
+<
+			*Vital.Async.Observable-operators.reduce()*
+			*Vital.Async.Observable.Operators.reduce()*
+			*Vital.Async.Observable.Operators.Reduce.reduce()*
+.reduce({fn}[, {init}])
+	Returns a new Observable that applies a {fn} against an accumulator
+	and each value of the stream to reduce it to a single value.
+>
+	call Observable.of(1, 2, 3)
+	      \.let(Operators.reduce({ a, x -> a + x }))
+	      \.subscribe({ v -> execute('echo v', '') })
+	" 6
+	call Observable.of(1, 2, 3)
+	      \.let(Operators.reduce({ a, x -> a + x }, 5))
+	      \.subscribe({ v -> execute('echo v', '') })
+	" 11
+<
+			*Vital.Async.Observable-operators.tap()*
+			*Vital.Async.Observable.Operators.tap()*
+			*Vital.Async.Observable.Operators.Tap.tap()*
+.tap({fn})
+	Call {fn} for every value in the stream without touching the source.
+>
+	call Observable.of(1, 2, 3)
+	      \.let(Operators.tap({ x -> execute('echo x') }))
+	      \.subscribe({ -> 0 })
+	" 1
+	" 2
+	" 3
+<
+
+=============================================================================
+vim:tw=78:fo=tcq2mM:ts=8:ft=help:norl

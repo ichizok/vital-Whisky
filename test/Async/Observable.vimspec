@@ -1,0 +1,268 @@
+Describe Async.Observable
+  Before all
+    let Promise = vital#vital#import('Async.Promise')
+  End
+
+  Before
+    let Observable = healthcheck#vital#import('Async.Observable')
+  End
+
+  Describe .is_observable()
+    It returns False if {maybe_observable} is not Dict
+      Assert False(Observable.is_observable(0))
+      Assert False(Observable.is_observable(''))
+      Assert False(Observable.is_observable([]))
+      Assert False(Observable.is_observable(function('tr')))
+    End
+
+    It returns False if {maybe_observable} does not have a symbol
+      Assert False(Observable.is_observable({}))
+    End
+
+    It returns True if {maybe_observable} has an invalid symbol
+      let observable = {}
+      let observable['@@observable'] = 1
+      Assert False(Observable.is_observable(observable))
+    End
+
+    It returns True if {maybe_observable} has a valid symbol
+      let observable = {}
+      let observable['@@observable'] = { -> observable }
+      Assert True(Observable.is_observable(observable))
+    End
+  End
+
+  Describe .new()
+    It returns an observable instance
+      let observable = Observable.new({ -> 0 })
+      Assert KeyExists(observable, 'subscribe')
+      Assert True(Observable.is_observable(observable))
+    End
+
+    Describe observable
+      It emits 'next' with a given algorithm
+        function! s:subscriber(observer) abort
+          call a:observer.next(1)
+          call a:observer.next(1)
+          call a:observer.next(2)
+          call a:observer.next(3)
+          call a:observer.next(5)
+          call a:observer.next(8)
+          call a:observer.complete()
+        endfunction
+
+        let results = []
+        call Observable.new(funcref('s:subscriber'))
+              \.subscribe({ v -> add(results, v) })
+        Assert Equals(results, [])
+        sleep 10m
+        Assert Equals(results, [1, 1, 2, 3, 5, 8])
+      End
+    End
+  End
+
+  Describe .of()
+    It returns an observable from items
+      let observable = Observable.of(0, 1, 2)
+      Assert True(Observable.is_observable(observable))
+    End
+
+    Describe observable
+      It emits 'next' with given items
+        let results = []
+        call Observable.of(1, 1, 2, 3, 5, 8)
+              \.subscribe({ v -> add(results, v) })
+        Assert Equals(results, [])
+        sleep 10m
+        Assert Equals(results, [1, 1, 2, 3, 5, 8])
+      End
+    End
+  End
+
+  Describe .from()
+    It returns an observable from an iterable
+      let observable = Observable.from([0, 1, 2])
+      Assert True(Observable.is_observable(observable))
+    End
+
+    It returns an observable from an observable
+      let observable = Observable.from(Observable.of(1, 1, 2, 3, 5, 8))
+      Assert True(Observable.is_observable(observable))
+    End
+
+    Describe observable
+      It emits 'next' with a given iterable
+        let results = []
+        call Observable.from([1, 1, 2, 3, 5, 8])
+              \.subscribe({ v -> add(results, v) })
+        Assert Equals(results, [])
+        sleep 10m
+        Assert Equals(results, [1, 1, 2, 3, 5, 8])
+      End
+
+      It emits 'next' with a given observable
+        let results = []
+        call Observable.from(Observable.of(1, 1, 2, 3, 5, 8))
+              \.subscribe({ v -> add(results, v) })
+        Assert Equals(results, [])
+        sleep 10m
+        Assert Equals(results, [1, 1, 2, 3, 5, 8])
+      End
+    End
+  End
+
+  Describe observable instance
+    Describe .subscribe()
+      It subscribes the observable
+        function! s:subscribe(observer) abort
+          call a:observer.next('1')
+          call a:observer.next('2')
+          call a:observer.next('3')
+          call a:observer.complete()
+        endfunction
+
+        let o = Observable.new(funcref('s:subscribe'))
+        let results = []
+        call o.subscribe({ x -> add(results, 'a' . x) })
+        call o.subscribe({ x -> add(results, 'b' . x) })
+        call o.subscribe({ x -> add(results, 'c' . x) })
+        sleep 10m
+        Assert Equals(results, [
+              \ 'a1',
+              \ 'a2',
+              \ 'a3',
+              \ 'b1',
+              \ 'b2',
+              \ 'b3',
+              \ 'c1',
+              \ 'c2',
+              \ 'c3',
+              \])
+      End
+    End
+
+    Describe .let()
+      Before all
+        let operators = {}
+        call extend(operators, vital#vital#import('Async.Observable.Operators.Map'))
+        call extend(operators, vital#vital#import('Async.Observable.Operators.Tap'))
+      End
+
+      It executes a given operator with an observable and return the result
+        let b = []
+        call Observable.of(1, 1, 2, 3, 5, 8)
+              \.let(operators.tap({ v -> add(b, v) }))
+              \.let(operators.map({ v -> v * 2 }))
+              \.let(operators.tap({ v -> add(b, v) }))
+              \.subscribe({ -> 0 })
+        sleep 10m
+        Assert Equals(b, [1, 2, 1, 2, 2, 4, 3, 6, 5, 10, 8, 16])
+      End
+    End
+
+    Describe .pipe()
+      It executes given operators sequentially and return the result
+        let operators = {}
+        call extend(operators, vital#vital#import('Async.Observable.Operators.Map'))
+        call extend(operators, vital#vital#import('Async.Observable.Operators.Tap'))
+
+        let b = []
+        call Observable.of(1, 1, 2, 3, 5, 8).pipe(
+            \ operators.tap({ v -> add(b, v) }),
+            \ operators.map({ v -> v * 2 }),
+            \ operators.tap({ v -> add(b, v) }),
+            \).subscribe({ -> 0 })
+        sleep 10m
+        Assert Equals(b, [1, 2, 1, 2, 2, 4, 3, 6, 5, 10, 8, 16])
+      End
+    End
+
+    Describe .to_promise()
+      It returns a promise which resolved with the last next value
+        let p = Observable.of(1, 2, 3, 4, 5)
+              \.to_promise()
+        let [result, error] = Promise.wait(p)
+        Assert Equals(error, v:null)
+        Assert Equals(result, 5)
+      End
+    End
+  End
+
+  Describe subscription instance
+    Describe .closed()
+      It returns 0 if the subscription has not closed
+        let observable = Observable.of()
+        let subscription = observable.subscribe({})
+        Assert Equals(subscription.closed(), 0)
+      End
+
+      It returns 1 if the subscription has closed (unsubscribed)
+        let observable = Observable.of()
+        let subscription = observable.subscribe({})
+        call subscription.unsubscribe()
+        Assert Equals(subscription.closed(), 1)
+      End
+    End
+  End
+
+  Describe subscription observer instance
+    Describe .next()
+      It notify a 'next' event to the subscription
+        let ns = []
+        let results = []
+        let observable = Observable.new({ observer -> add(ns, observer) })
+        let subscription = observable.subscribe({
+              \ 'next': { v -> add(results, v) }
+              \})
+        Assert Equals(results, [])
+        call ns[0].next('Hello')
+        Assert Equals(results, ['Hello'])
+      End
+    End
+
+    Describe .error()
+      It notify a 'error' event to the subscription
+        let ns = []
+        let results = []
+        let observable = Observable.new({ observer -> add(ns, observer) })
+        let subscription = observable.subscribe({
+              \ 'error': { v -> add(results, v) }
+              \})
+        Assert Equals(results, [])
+        call ns[0].error('Hello')
+        Assert Equals(results, ['Hello'])
+      End
+    End
+
+    Describe .complete()
+      It notify a 'complete' event to the subscription
+        let ns = []
+        let results = []
+        let observable = Observable.new({ observer -> add(ns, observer) })
+        let subscription = observable.subscribe({
+              \ 'complete': { -> add(results, 1) }
+              \})
+        Assert Equals(results, [])
+        call ns[0].complete()
+        Assert Equals(results, [1])
+      End
+    End
+
+    Describe .closed()
+      It returns 0 if the subscription has not closed
+        let ns = []
+        let observable = Observable.new({ observer -> add(ns, observer) })
+        let subscription = observable.subscribe({})
+        Assert Equals(ns[0].closed(), 0)
+      End
+
+      It returns 1 if the subscription has closed (unsubscribed)
+        let ns = []
+        let observable = Observable.new({ observer -> add(ns, observer) })
+        let subscription = observable.subscribe({})
+        call subscription.unsubscribe()
+        Assert Equals(ns[0].closed(), 1)
+      End
+    End
+  End
+End
